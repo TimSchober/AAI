@@ -1,77 +1,96 @@
-# Job Application Agent
+# 🤖 AAI: Multimodal RAG Agent + Job Search Platform
 
-A multi-agent system that helps users **find jobs** and (in future) **improve
-applications**. Agents share capabilities and data through a single **MCP
-server**, which is the communication backbone for adding more agents later.
+Alles-in-einem Projekt mit:
+- **RAG API**: FastAPI für Dokumentenverarbeitung, FAISS Retrieval
+- **Job Agent CLI**: Intelligenter Agent für Jobsuche
 
-## Setup
-
-### Setup python venv
-
-When python is installed on your machine use this command to create a virtual environment:
+## 🚀 Quick Start
 
 ```bash
-python -m venv ./venv
-```
+cd AAI/
 
-Then activate the venv by:
+# 1. venv aktivieren
+source ../venv/bin/activate
 
-```bash
-source ./venv/bin/activate
-```
-
-Then install the required packages:
-
-```bash
+# 2. Dependencies
 pip install -r requirements.txt
-```
 
-### Setup Environment Variables
-
-Setup env vars by copying the example env vile like this:
-
-```bash
+# 3. .env setup
 cp .env.example .env
+
+# 4. Starten
+python main.py              # RAG API (Standard)
+python main.py --cli        # Job Agent CLI
+python -m mcp_server        # MCP Server (optional)
+python -m ingest            # ChromaDB Ingest
 ```
 
-Then edit the values in the .env file.
-
-### Setup Ollama
-
-Make sure Ollama is running and the model is pulled:
+## 📚 RAG API Endpoints
 
 ```bash
-ollama serve
-ollama pull qwen3.5:4b
+# Health Check
+curl http://localhost:8000/health
+
+# Dokument hochladen
+curl -X POST http://localhost:8000/ingest \
+  -F "files=@document.pdf"
+
+# Abfrage
+curl -X POST http://localhost:8000/query \
+  -F "q=Was steht darin?"
+
+# Dokumente auflisten
+curl http://localhost:8000/documents
+
+# Index neu aufbauen
+curl -X POST http://localhost:8000/rebuild-index
 ```
 
-Ollama needs to be running on port 11434, otherwise it can be adjusted in .env file.
-
-## Run
-
-If you want you can put files (.md) inside the ./ChromaDB/docs folder and then run the following command to insert the files to the RAG DB:
+## 🎤 Job Agent CLI
 
 ```bash
-python -m ingest
+python main.py --cli
+
+# Dann Prompt eingeben:
+# > Ich suche eine Stelle als Softwareentwickler in Berlin
 ```
 
-The agent and the MCP server are separate processes.
-The MCP server needs to run by running:
+## 📁 Struktur
 
-```bash
-python -m mcp_server
+```
+AAI/
+├── main.py                 # Hybrid Einstiegspunkt
+├── config.py              # Zentrale Konfiguration
+├── requirements.txt       # All Dependencies
+├── api/
+│   └── rag_routes.py      # RAG FastAPI Endpoints
+├── agents/
+│   ├── job_search_agent.py
+│   └── __init__.py
+├── core_functions/
+├── mcp_server/
+├── ChromaDB/
+├── data/                  # FAISS Index
+├── ingest.py
+└── .env.example
 ```
 
-After that the agents can be started by running:
+## ⚙️ Konfiguration
 
-```bash
-python -m main
-```
+Bearbeite `.env` für:
+- Ollama Host & Model
+- Database URL
+- FAISS Pfade
+- API Port
 
-## Example
+## 🔧 Troubleshooting
 
-> Ich suche eine Stelle als Softwareentwickler in Berlin, Vollzeit.
+| Problem | Lösung |
+|---------|--------|
+| `ConnectionError: localhost:11434` | `ollama serve` |
+| Port 8000 belegt | `.env`: `API_PORT=8001` |
+| Import Error | Stellen Sie sicher, aus AAI/ Ordner zu starten |
 
-The agent searches the Arbeitsagentur job board, caches the offers in the RAG
-store, categorizes them and presents a list. If nothing matches it returns an
-empty list and suggests relaxing the preferences.
+---
+
+**Status:** Ready to use! 🚀
