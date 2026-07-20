@@ -31,11 +31,11 @@ JOBSUCHE_API_URL: str = os.getenv(
 # Chroma DB:
 CHROMA_DB_PATH: str = os.getenv(
     "CHROMA_DB_PATH",
-    str(REPO_ROOT / "ChromaDB" / "chroma_db"),
+    str(PACKAGE_ROOT / "ChromaDB" / "chroma_db"),
 )
 CHROMA_COLLECTION: str = os.getenv("CHROMA_COLLECTION", "bewerbungsunterlagen")
 EMBED_MODEL: str = os.getenv("EMBED_MODEL", "all-MiniLM-L6-v2")
-DOCS_DIR: str = os.getenv("DOCS_DIR", str(REPO_ROOT / "ChromaDB" / "docs"))
+DOCS_DIR: str = os.getenv("DOCS_DIR", str(PACKAGE_ROOT / "ChromaDB" / "docs"))
 
 # MCP server
 MCP_HOST: str = os.getenv("MCP_HOST", "127.0.0.1")

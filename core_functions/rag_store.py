@@ -31,6 +31,11 @@ VALID_TYPES = {
     "zeugnis",
     "praeferenz",
     "stellenangebot",
+    "arbeitszeugnis",
+    "Abschlusszeugnis",
+    "cv",
+    "Notenübersicht",
+    "Noten",
 }
 
 CHUNK_SIZE = 800
@@ -55,12 +60,15 @@ def _read_file(path: str | Path) -> str:
     if suffix == ".json":
         data = json.loads(path.read_text(encoding="utf-8"))
         return json.dumps(data, ensure_ascii=False, indent=2)
-    if suffix == ".pdf": # TODO: Add support for PDF files
-        # import fitz  # pip install pymupdf
-        # doc = fitz.open(str(path))
-        # return "\n".join(page.get_text() for page in doc)
-        raise NotImplementedError(
-            "PDF not supported yet."
+    if suffix == ".pdf":
+        import fitz  # pymupdf
+        doc = fitz.open(str(path))
+        return "\n".join(page.get_text() for page in doc)
+    if suffix == ".csv":
+        import csv
+        rows = list(csv.DictReader(path.read_text(encoding="utf-8").splitlines()))
+        return "\n".join(
+            ", ".join(f"{k}: {v}" for k, v in row.items()) for row in rows
         )
     raise ValueError(f"Unsupported file format: {suffix}")
 
@@ -139,7 +147,7 @@ class JobApplicationStore:
         }
         ingested: dict[str, int] = {}
         for file in sorted(docs_dir.iterdir()):
-            if file.suffix.lower() not in {".md", ".txt", ".json"}:
+            if file.suffix.lower() not in {".md", ".txt", ".json", ".pdf", ".csv"}:
                 continue
             matched = next(
                 (t for key, t in name_to_type.items() if key in file.stem.lower()),
