@@ -12,6 +12,7 @@ from langchain.agents import create_agent
 
 from config import OLLAMA_MODEL, OLLAMA_OPENAI_URL, OLLAMA_API_KEY
 from agents.mcp_client import load_mcp_tools
+from tracing import traced
 
 
 SYSTEM_PROMPT = """\
@@ -32,7 +33,8 @@ Arbeitsweise:
      nach, falls Pflichtangaben fehlen. Optional: Umkreis, Arbeitszeit, Befristung.
   2. Nutze bei Bedarf get_profile_context, um die Präferenzen aus den Unterlagen
      des Nutzers einzubeziehen.
-  3. Rufe search_jobs auf. Die Ergebnisse werden automatisch gespeichert.
+  3. Rufe search_jobs auf. Starte mit wenigen Ergebnissen (z.B. size=3 oder 5),
+     damit die Antwort nicht zu groß wird. Die Ergebnisse werden automatisch gespeichert.
   4. Kategorisiere die gefundenen Stellen sinnvoll (z.B. nach Arbeitgeber,
      Vollzeit/Teilzeit, Ort) und präsentiere eine übersichtliche, nummerierte Liste.
   5. Findest du keine Stellen, gib das ehrlich zurück und schlage konkret vor,
@@ -52,6 +54,7 @@ def build_model() -> ChatOpenAI:
     )
 
 
+@traced("build_job_search_agent")
 async def build_job_search_agent(checkpointer: MemorySaver | None = None):
     tools = await load_mcp_tools()
     model = build_model()

@@ -18,9 +18,33 @@ from config import (
     JOBSUCHE_API_KEY,
 )
 from agents.job_search_agent import build_job_search_agent
+from tracing import init_tracing
 
 
 console = Console()
+init_tracing(launch_ui=False)
+
+
+def _extract_answer(result: dict) -> str:
+    messages = result.get("messages", [])
+    for message in reversed(messages):
+        content = getattr(message, "content", None)
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+        if isinstance(content, list):
+            parts = []
+            for item in content:
+                if isinstance(item, dict):
+                    text = item.get("text") or item.get("content")
+                    if isinstance(text, str) and text.strip():
+                        parts.append(text.strip())
+                elif isinstance(item, str) and item.strip():
+                    parts.append(item.strip())
+            if parts:
+                return "\n".join(parts)
+        if content not in (None, ""):
+            return str(content).strip()
+    return ""
 
 
 def _check_ollama() -> tuple[bool, str]:
@@ -94,9 +118,15 @@ async def chat() -> None:
                 {"messages": [{"role": "user", "content": user_input}]},
                 config,
             )
-            answer = result["messages"][-1].content
+            answer = _extract_answer(result)
             console.print()
-            console.print(Markdown(answer or "(keine Antwort)"))
+            if answer:
+                console.print(Markdown(answer))
+            else:
+                console.print("[yellow](keine Antwort)[/yellow]")
+                console.print("[dim]Debug:[/dim] Verlauf der Nachrichten im Ergebnis:")
+                for idx, message in enumerate(result.get("messages", [])):
+                    console.print(f"  {idx}: {type(message).__name__} -> {getattr(message, 'content', None)!r}")
             console.print()
         except Exception as exc:
             console.print(f"[red]Fehler: {exc}[/red]\n")
