@@ -32,10 +32,10 @@ VALID_TYPES = {
     "praeferenz",
     "stellenangebot",
     "arbeitszeugnis",
-    "Abschlusszeugnis",
+    "abschlusszeugnis",
     "cv",
-    "Notenübersicht",
-    "Noten",
+    "notenübersicht",
+    "noten",
 }
 
 CHUNK_SIZE = 800
@@ -144,6 +144,11 @@ class JobApplicationStore:
             "zeugnis": "zeugnis",
             "praeferenz": "praeferenz",
             "praeferenzen": "praeferenz",
+            "arbeitszeugnis": "arbeitszeugnis",
+            "abschlusszeugnis": "abschlusszeugnis",
+            "cv": "cv",
+            "notenübersicht": "notenübersicht",
+            "noten": "noten"
         }
         ingested: dict[str, int] = {}
         for file in sorted(docs_dir.iterdir()):

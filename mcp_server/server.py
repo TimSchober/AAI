@@ -127,8 +127,7 @@ def query_knowledge(
 
     Args:
         query: Natural-language search text.
-        doc_types: Restrict to types for stored offers,
-                   ["lebenslauf"] for the CV. None searches everything.
+        doc_types: Restrict the search to one or more types: "lebenslauf", "noten", "zeugnis". None searches everything.
         n_results: How many chunks to return.
     """
     return _rag().query(query, doc_types=doc_types, n_results=n_results)
@@ -152,7 +151,7 @@ def list_knowledge() -> dict[str, int]:
 @mcp.tool()
 def ingest_documents(docs_dir: str = "") -> dict[str, int]:
     """
-    Ingest the users personal documents (CV, motivation, preferences) from a
+    Ingest the users personal documents (CV, motivation, preferences, grades, employment reference) from a
     folder into the knowledge base. Defaults to the configured DOCS_DIR.
     Returns a mapping {filename: chunks_stored}.
     """
