@@ -57,7 +57,7 @@ def search_jobs(
     umkreis: int = 0,
     arbeitszeit: str = "",
     befristung: str = "",
-    size: int = 10,
+    size: int = 5,
     store: bool = True,
 ) -> dict[str, Any]: # TODO: For now only Arbeitsagentur. Later needs to be adjusted to use different APIs.
     """
