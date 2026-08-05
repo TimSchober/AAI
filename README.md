@@ -90,6 +90,11 @@ The MCP server needs to run by running:
 python -m mcp_server
 ```
 
+For the loggin use:
+```bash
+python -m phoenix serve
+```
+
 After that the agents can be started by running:
 
 ```bash
