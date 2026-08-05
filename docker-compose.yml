@@ -1,0 +1,112 @@
+# Job Application Agent - full stack.
+#
+#   docker compose up --build
+#
+# Ollama is NOT containerised here: it usually runs on the host (often with GPU
+# access). The services reach it via host.docker.internal, which the
+# extra_hosts entry maps to the host gateway on Linux too.
+
+name: aai
+
+services:
+  rag:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.rag
+    image: aai-rag
+    ports:
+      - "${CHROMA_PORT:-8200}:8000"
+    volumes:
+      - rag-data:/chroma/chroma
+    healthcheck:
+      test: ["CMD", "python3", "-c",
+             "import socket;socket.create_connection(('localhost',8000),3).close()"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  jobsuche:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.jobsuche
+    image: aai-jobsuche
+    environment:
+      JOBSUCHE_API_KEY: ${JOBSUCHE_API_KEY:-jobboerse-jobsuche}
+      JOBSUCHE_API_URL: ${JOBSUCHE_API_URL:-https://rest.arbeitsagentur.de/jobboerse/jobsuche-service}
+    ports:
+      - "${JOBSUCHE_SERVICE_PORT:-8100}:8100"
+    restart: unless-stopped
+
+  mcp:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.mcp
+      args:
+        EMBED_MODEL: ${EMBED_MODEL:-all-MiniLM-L6-v2}
+    image: aai-mcp
+    environment:
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8000
+      MCP_PATH: ${MCP_PATH:-/mcp}
+      CHROMA_HOST: rag
+      CHROMA_PORT: 8000
+      CHROMA_COLLECTION: ${CHROMA_COLLECTION:-bewerbungsunterlagen}
+      EMBED_MODEL: ${EMBED_MODEL:-all-MiniLM-L6-v2}
+      JOBSUCHE_SERVICE_URL: http://jobsuche:8100
+      DOCS_DIR: /app/docs
+    volumes:
+      - ./ChromaDB/docs:/app/docs:ro
+    ports:
+      - "${MCP_PORT:-8000}:8000"
+    depends_on:
+      rag:
+        condition: service_started
+      jobsuche:
+        condition: service_started
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    image: aai-backend
+    environment:
+      BACKEND_HOST: 0.0.0.0
+      BACKEND_PORT: 5000
+      MCP_URL: http://mcp:8000${MCP_PATH:-/mcp}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:4b}
+      AGENT_TIMEOUT: ${AGENT_TIMEOUT:-300}
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-*}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${BACKEND_PORT:-5000}:5000"
+    depends_on:
+      mcp:
+        condition: service_started
+    restart: unless-stopped
+
+  cli:
+    image: aai-backend
+    profiles: ["cli"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    environment:
+      MCP_URL: http://mcp:8000${MCP_PATH:-/mcp}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:4b}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      mcp:
+        condition: service_started
+    command: ["python", "-m", "main"]
+    stdin_open: true
+    tty: true
+
+volumes:
+  rag-data:

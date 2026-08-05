@@ -1,0 +1,17 @@
+# RAG storage - the ChromaDB vector store the knowledge base lives in.
+#
+# Chroma runs as a plain storage/query server here: embeddings are computed by
+# the clients (see core_functions/rag_store.py, which uses a local
+# sentence-transformers model), so this image needs no ML dependencies.
+#
+#   docker build -f docker/Dockerfile.rag -t aai-rag .
+FROM chromadb/chroma:1.5.9
+
+ENV IS_PERSISTENT=TRUE \
+    PERSIST_DIRECTORY=/chroma/chroma \
+    ANONYMIZED_TELEMETRY=FALSE
+
+# Bind-mount or name a volume here to keep the knowledge base across restarts.
+VOLUME ["/chroma/chroma"]
+
+EXPOSE 8000

@@ -1,0 +1,20 @@
+.git
+.gitignore
+venv/
+.venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.env
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local embedded vector store - the rag service owns the data in Docker.
+ChromaDB/chroma_db/
+ChromaDB/main.py
+ChromaDB/rag/
+
+docker-compose.yml
+README.md

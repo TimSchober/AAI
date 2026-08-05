@@ -28,11 +28,16 @@ JOBSUCHE_API_URL: str = os.getenv(
     "https://rest.arbeitsagentur.de/jobboerse/jobsuche-service",
 )
 
-# Chroma DB:
+JOBSUCHE_SERVICE_URL: str = os.getenv("JOBSUCHE_SERVICE_URL", "")
+JOBSUCHE_SERVICE_HOST: str = os.getenv("JOBSUCHE_SERVICE_HOST", "0.0.0.0")
+JOBSUCHE_SERVICE_PORT: int = int(os.getenv("JOBSUCHE_SERVICE_PORT", "8100"))
+
 CHROMA_DB_PATH: str = os.getenv(
     "CHROMA_DB_PATH",
     str(PACKAGE_ROOT / "ChromaDB" / "chroma_db"),
 )
+CHROMA_HOST: str = os.getenv("CHROMA_HOST", "")
+CHROMA_PORT: int = int(os.getenv("CHROMA_PORT", "8200"))
 CHROMA_COLLECTION: str = os.getenv("CHROMA_COLLECTION", "bewerbungsunterlagen")
 EMBED_MODEL: str = os.getenv("EMBED_MODEL", "all-MiniLM-L6-v2")
 DOCS_DIR: str = os.getenv("DOCS_DIR", str(PACKAGE_ROOT / "ChromaDB" / "docs"))
@@ -42,3 +47,9 @@ MCP_HOST: str = os.getenv("MCP_HOST", "127.0.0.1")
 MCP_PORT: int = int(os.getenv("MCP_PORT", "8000"))
 MCP_PATH: str = os.getenv("MCP_PATH", "/mcp")
 MCP_URL: str = os.getenv("MCP_URL", f"http://{MCP_HOST}:{MCP_PORT}{MCP_PATH}")
+
+# Flask backend API
+BACKEND_HOST: str = os.getenv("BACKEND_HOST", "0.0.0.0")
+BACKEND_PORT: int = int(os.getenv("BACKEND_PORT", "5000"))
+BACKEND_CORS_ORIGINS: str = os.getenv("BACKEND_CORS_ORIGINS", "*")
+AGENT_TIMEOUT: int = int(os.getenv("AGENT_TIMEOUT", "300"))

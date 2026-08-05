@@ -19,8 +19,9 @@ from typing import Any, Optional
 
 from mcp.server.fastmcp import FastMCP
 
-from config import MCP_HOST, MCP_PORT, MCP_PATH, DOCS_DIR
+from config import MCP_HOST, MCP_PORT, MCP_PATH, DOCS_DIR, JOBSUCHE_SERVICE_URL
 from core_functions.arbeitsagentur_jobsuche_API_jobs_client import JobsucheClient
+from core_functions.jobsuche_service_client import JobsucheServiceClient
 from core_functions.rag_store import JobApplicationStore
 
 
@@ -31,14 +32,19 @@ mcp = FastMCP(
     streamable_http_path=MCP_PATH,
 )
 
-_jobs_client: Optional[JobsucheClient] = None
+_jobs_client: Optional[JobsucheClient | JobsucheServiceClient] = None
 _store: Optional[JobApplicationStore] = None
 
 
-def _jobs() -> JobsucheClient:
+def _jobs() -> JobsucheClient | JobsucheServiceClient:
+    """Route through the jobsuche microservice if one is configured."""
     global _jobs_client
     if _jobs_client is None:
-        _jobs_client = JobsucheClient()
+        _jobs_client = (
+            JobsucheServiceClient(JOBSUCHE_SERVICE_URL)
+            if JOBSUCHE_SERVICE_URL
+            else JobsucheClient()
+        )
     return _jobs_client
 
 

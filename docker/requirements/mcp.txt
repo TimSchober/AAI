@@ -1,0 +1,8 @@
+# MCP server: job board client + ChromaDB knowledge base.
+# sentence-transformers pulls in torch, which dominates this image's size.
+mcp>=1.2.0
+chromadb>=0.5.0
+sentence-transformers>=3.0.0
+httpx>=0.27.0
+python-dotenv>=1.0.0
+pymupdf>=1.24.0

@@ -22,7 +22,13 @@ from typing import Any, Optional
 import chromadb
 from chromadb.utils import embedding_functions
 
-from config import CHROMA_DB_PATH, CHROMA_COLLECTION, EMBED_MODEL
+from config import (
+    CHROMA_DB_PATH,
+    CHROMA_HOST,
+    CHROMA_PORT,
+    CHROMA_COLLECTION,
+    EMBED_MODEL,
+)
 
 VALID_TYPES = {
     "lebenslauf",
@@ -89,8 +95,14 @@ class JobApplicationStore:
         path: str = CHROMA_DB_PATH,
         collection: str = CHROMA_COLLECTION,
         embed_model: str = EMBED_MODEL,
+        host: str = CHROMA_HOST,
+        port: int = CHROMA_PORT,
     ):
-        self.client = chromadb.PersistentClient(path=path)
+
+        if host:
+            self.client = chromadb.HttpClient(host=host, port=port)
+        else:
+            self.client = chromadb.PersistentClient(path=path)
         self.embed_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
             model_name=embed_model
         )
