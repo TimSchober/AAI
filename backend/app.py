@@ -2,7 +2,7 @@
 Flask application factory for the Job Application Agent backend.
 
 Exposes the agents from ./agents and the tool catalogue of the MCP server in
-./mcp_server over plain HTTP/JSON:
+./mcp_server over plain HTTP/JSON.
 
   GET    /health                                    liveness
   GET    /ready                                     dependency readiness
@@ -13,6 +13,9 @@ Exposes the agents from ./agents and the tool catalogue of the MCP server in
   DELETE /api/agents/<id>/threads/<thread_id>       forget a conversation
   GET    /api/mcp/tools                             MCP tool catalogue
   POST   /api/mcp/tools/<name>/call                 invoke one MCP tool
+
+The two chat endpoints take JSON or multipart/form-data; the latter is how
+images reach the agent, thats for feeding the Lebenslauf etc.
 """
 
 from __future__ import annotations
@@ -23,7 +26,14 @@ from typing import Any
 import httpx
 from flask import Flask, jsonify
 
-from config import AGENT_TIMEOUT, BACKEND_CORS_ORIGINS, BACKEND_HOST, BACKEND_PORT
+from config import (
+    AGENT_TIMEOUT,
+    BACKEND_CORS_ORIGINS,
+    BACKEND_HOST,
+    BACKEND_PORT,
+    MAX_UPLOAD_MB,
+)
+from backend.attachments import AttachmentError
 from backend.routes import agents_bp, health_bp, mcp_bp
 from backend.runtime import AsyncRuntime
 from backend.services import AgentNotFound, AgentService, MCPService, ToolNotFound
@@ -34,11 +44,15 @@ log = logging.getLogger(__name__)
 def create_app() -> Flask:
     app = Flask(__name__)
     app.config["JSON_SORT_KEYS"] = False
+    app.config["MAX_CONTENT_LENGTH"] = (MAX_UPLOAD_MB + 1) * 1024 * 1024
 
     runtime = AsyncRuntime()
+    mcp_service = MCPService(runtime, timeout=AGENT_TIMEOUT)
     app.extensions["async_runtime"] = runtime
-    app.extensions["agent_service"] = AgentService(runtime, timeout=AGENT_TIMEOUT)
-    app.extensions["mcp_service"] = MCPService(runtime, timeout=AGENT_TIMEOUT)
+    app.extensions["mcp_service"] = mcp_service
+    app.extensions["agent_service"] = AgentService(
+        runtime, timeout=AGENT_TIMEOUT, mcp=mcp_service
+    )
 
     app.register_blueprint(health_bp)
     app.register_blueprint(agents_bp)
@@ -70,6 +84,14 @@ def _register_cors(app: Flask) -> None:
 
 
 def _register_error_handlers(app: Flask) -> None:
+    @app.errorhandler(AttachmentError)
+    def bad_attachment(exc: AttachmentError) -> Any:
+        return jsonify({"error": str(exc)}), exc.status
+
+    @app.errorhandler(413)
+    def too_large(_exc: Any) -> Any:
+        return jsonify({"error": f"request body exceeds {MAX_UPLOAD_MB} MB"}), 413
+
     @app.errorhandler(AgentNotFound)
     def unknown_agent(exc: AgentNotFound) -> Any:
         return jsonify({"error": f"unknown agent '{exc.args[0]}'"}), 404
@@ -93,8 +115,6 @@ def _register_error_handlers(app: Flask) -> None:
 
     @app.errorhandler(Exception)
     def unhandled(exc: Exception) -> Any:
-        # The LLM SDK wraps connection failures in its own exception types, so
-        # unwrap the chain instead of matching on provider-specific classes.
         if _is_connection_error(exc):
             log.warning("dependency unreachable: %s", exc)
             return (

@@ -8,6 +8,8 @@ from typing import Any
 
 from flask import Blueprint, Response, current_app, jsonify, request
 
+from backend.attachments import Attachment, parse_chat_request
+
 agents_bp = Blueprint("agents", __name__, url_prefix="/api/agents")
 
 
@@ -15,15 +17,10 @@ def _service() -> Any:
     return current_app.extensions["agent_service"]
 
 
-def _payload() -> dict[str, Any]:
-    return request.get_json(silent=True) or {}
-
-
-def _message_and_thread() -> tuple[str, str]:
-    body = _payload()
-    message = (body.get("message") or "").strip()
-    thread_id = body.get("thread_id") or uuid.uuid4().hex
-    return message, thread_id
+def _turn() -> tuple[str, str, list[Attachment]]:
+    """Read one chat turn: JSON body or multipart with image parts."""
+    message, thread_id, attachments = parse_chat_request(request)
+    return message, thread_id or uuid.uuid4().hex, attachments
 
 
 @agents_bp.get("")
@@ -34,29 +31,33 @@ def list_agents() -> Any:
 
 @agents_bp.post("/<agent_id>/chat")
 def chat(agent_id: str) -> Any:
-    message, thread_id = _message_and_thread()
-    if not message:
-        return jsonify({"error": "field 'message' is required"}), 400
-    return jsonify(_service().chat(agent_id, message, thread_id))
+    message, thread_id, attachments = _turn()
+    if not message and not attachments:
+        return jsonify({"error": "field 'message' or an image is required"}), 400
+    return jsonify(_service().chat(agent_id, message, thread_id, attachments))
 
 
 @agents_bp.post("/<agent_id>/chat/stream")
 def chat_stream(agent_id: str) -> Any:
-    message, thread_id = _message_and_thread()
-    if not message:
-        return jsonify({"error": "field 'message' is required"}), 400
+    message, thread_id, attachments = _turn()
+    if not message and not attachments:
+        return jsonify({"error": "field 'message' or an image is required"}), 400
 
-    # Bind these now: the generator below runs after the request context is
-    # gone, so `current_app` is no longer available inside it.
     service = _service()
     logger = current_app.logger
-    # Surface an unknown agent as a 404 rather than an error event mid-stream.
     service.ensure_exists(agent_id)
 
     def events() -> Any:
-        yield _sse({"type": "start", "agent": agent_id, "thread_id": thread_id})
+        yield _sse(
+            {
+                "type": "start",
+                "agent": agent_id,
+                "thread_id": thread_id,
+                "attachments": [a.describe() for a in attachments],
+            }
+        )
         try:
-            for event in service.stream(agent_id, message, thread_id):
+            for event in service.stream(agent_id, message, thread_id, attachments):
                 yield _sse(event)
         except Exception as exc:
             logger.exception("streaming turn failed")

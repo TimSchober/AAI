@@ -1,22 +1,24 @@
 """
 Service layer between the Flask routes and the agent / MCP internals.
-
-Holds the lazily built agents, their shared checkpointer (so a thread_id keeps
-its conversation across requests) and the cached MCP tool list.
 """
 
 from __future__ import annotations
 
+import logging
 import threading
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Awaitable, Callable
 
 from langgraph.checkpoint.memory import MemorySaver
 
+from agents.company_research_agent import build_company_research_agent
 from agents.job_search_agent import build_job_search_agent
 from agents.mcp_client import load_mcp_tools
+from backend.attachments import Attachment
 from backend.runtime import AsyncRuntime
 from backend.serialization import message_to_dict, tool_to_dict
+
+log = logging.getLogger(__name__)
 
 
 class AgentNotFound(KeyError):
@@ -45,15 +47,31 @@ AGENT_SPECS: dict[str, AgentSpec] = {
         ),
         builder=build_job_search_agent,
     ),
+    "company_research": AgentSpec(
+        id="company_research",
+        name="Unternehmens-Recherche-Agent",
+        description=(
+            "Recherchiert den Arbeitgeber hinter einem gefundenen Stellenangebot "
+            "aus freien Quellen (Wikipedia, Wikidata, OpenStreetMap) und fasst "
+            "Branche, Größe, Standort und Website zusammen."
+        ),
+        builder=build_company_research_agent,
+    ),
 }
 
 
 class AgentService:
     """Builds agents on demand and runs turns on the shared event loop."""
 
-    def __init__(self, runtime: AsyncRuntime, timeout: float) -> None:
+    def __init__(
+        self,
+        runtime: AsyncRuntime,
+        timeout: float,
+        mcp: "MCPService | None" = None,
+    ) -> None:
         self._runtime = runtime
         self._timeout = timeout
+        self._mcp = mcp
         self._agents: dict[str, Any] = {}
         self._checkpointers: dict[str, MemorySaver] = {}
         self._lock = threading.Lock()
@@ -92,11 +110,17 @@ class AgentService:
     def _config(thread_id: str) -> dict[str, Any]:
         return {"configurable": {"thread_id": thread_id}}
 
-    def chat(self, agent_id: str, message: str, thread_id: str) -> dict[str, Any]:
+    def chat(
+        self,
+        agent_id: str,
+        message: str,
+        thread_id: str,
+        attachments: list[Attachment] | None = None,
+    ) -> dict[str, Any]:
         agent = self._get_agent(agent_id)
         result = self._runtime.run(
             agent.ainvoke(
-                {"messages": [{"role": "user", "content": message}]},
+                self._turn_input(message, attachments),
                 self._config(thread_id),
             ),
             timeout=self._timeout,
@@ -120,14 +144,19 @@ class AgentService:
         }
 
     def stream(
-        self, agent_id: str, message: str, thread_id: str
+        self,
+        agent_id: str,
+        message: str,
+        thread_id: str,
+        attachments: list[Attachment] | None = None,
     ) -> Any:
         """Yield {"type": ..., ...} update events for one agent turn."""
         agent = self._get_agent(agent_id)
+        turn_input = self._turn_input(message, attachments)
 
         def make_agen() -> AsyncIterator[Any]:
             return agent.astream(
-                {"messages": [{"role": "user", "content": message}]},
+                turn_input,
                 self._config(thread_id),
                 stream_mode="updates",
             )
@@ -136,6 +165,59 @@ class AgentService:
             for node, payload in (update or {}).items():
                 for msg in (payload or {}).get("messages", []) or []:
                     yield {"type": "message", "node": node, **message_to_dict(msg)}
+
+    def _turn_input(
+        self, message: str, attachments: list[Attachment] | None
+    ) -> dict[str, Any]:
+        """
+        Build the user message for one turn.
+
+        Without attachments this is plain text. With attachments the images are
+        first stored in the knowledge base and then handed to the model as
+        OpenAI-style `image_url` blocks, which Ollama's compatible API accepts
+        for vision models.
+        """
+        if not attachments:
+            return {"messages": [{"role": "user", "content": message}]}
+
+        stored = self._ingest_images(attachments, caption=message)
+        listing = ", ".join(a.filename for a in attachments)
+        text = message or "Bitte sieh dir die angehängten Bilder an."
+        content: list[dict[str, Any]] = [
+            {
+                "type": "text",
+                "text": (
+                    f"{text}\n\n[Anhänge: {listing}. Sie liegen als Bilder vor und "
+                    f"sind unter diesen Namen in der Wissensdatenbank abgelegt "
+                    f"({'gespeichert' if stored else 'Speichern fehlgeschlagen'}).]"
+                ),
+            }
+        ]
+        content += [
+            {"type": "image_url", "image_url": {"url": a.data_url}}
+            for a in attachments
+        ]
+        return {"messages": [{"role": "user", "content": content}]}
+
+    def _ingest_images(self, attachments: list[Attachment], caption: str) -> bool:
+        """File the images into the RAG store via the MCP server. Best effort."""
+        if self._mcp is None:
+            return False
+        try:
+            for attachment in attachments:
+                self._mcp.call_tool(
+                    "ingest_image",
+                    {
+                        "filename": attachment.filename,
+                        "mime_type": attachment.mime_type,
+                        "data_base64": attachment.base64,
+                        "caption": caption,
+                    },
+                )
+            return True
+        except Exception:
+            log.warning("could not store chat images in the knowledge base", exc_info=True)
+            return False
 
     def history(self, agent_id: str, thread_id: str) -> dict[str, Any]:
         agent = self._get_agent(agent_id)
@@ -189,7 +271,6 @@ class MCPService:
     def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         tool = next((t for t in self._load() if t.name == name), None)
         if tool is None:
-            # The catalogue may be stale if the MCP server gained a tool.
             tool = next((t for t in self._load(refresh=True) if t.name == name), None)
         if tool is None:
             raise ToolNotFound(name)
