@@ -32,6 +32,21 @@ JOBSUCHE_SERVICE_URL: str = os.getenv("JOBSUCHE_SERVICE_URL", "")
 JOBSUCHE_SERVICE_HOST: str = os.getenv("JOBSUCHE_SERVICE_HOST", "0.0.0.0")
 JOBSUCHE_SERVICE_PORT: int = int(os.getenv("JOBSUCHE_SERVICE_PORT", "8100"))
 
+# Company research.
+# Wikipedia, Wikidata and OpenStreetMap need no key; Brave is optional and only adds a web/news search.
+BRAVE_API_KEY: str = os.getenv("BRAVE_API_KEY", "")
+BRAVE_SEARCH_URL: str = os.getenv(
+    "BRAVE_SEARCH_URL", "https://api.search.brave.com/res/v1/web/search"
+)
+WIKIDATA_SPARQL_URL: str = os.getenv(
+    "WIKIDATA_SPARQL_URL", "https://query.wikidata.org/sparql"
+)
+NOMINATIM_URL: str = os.getenv(
+    "NOMINATIM_URL", "https://nominatim.openstreetmap.org/search"
+)
+COMPANY_RESEARCH_LANG: str = os.getenv("COMPANY_RESEARCH_LANG", "de")
+COMPANY_RESEARCH_TIMEOUT: float = float(os.getenv("COMPANY_RESEARCH_TIMEOUT", "30"))
+
 CHROMA_DB_PATH: str = os.getenv(
     "CHROMA_DB_PATH",
     str(PACKAGE_ROOT / "ChromaDB" / "chroma_db"),
@@ -41,6 +56,7 @@ CHROMA_PORT: int = int(os.getenv("CHROMA_PORT", "8200"))
 CHROMA_COLLECTION: str = os.getenv("CHROMA_COLLECTION", "bewerbungsunterlagen")
 EMBED_MODEL: str = os.getenv("EMBED_MODEL", "all-MiniLM-L6-v2")
 DOCS_DIR: str = os.getenv("DOCS_DIR", str(PACKAGE_ROOT / "ChromaDB" / "docs"))
+UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", str(PACKAGE_ROOT / "ChromaDB" / "uploads"))
 
 # MCP server
 MCP_HOST: str = os.getenv("MCP_HOST", "127.0.0.1")
@@ -53,3 +69,13 @@ BACKEND_HOST: str = os.getenv("BACKEND_HOST", "0.0.0.0")
 BACKEND_PORT: int = int(os.getenv("BACKEND_PORT", "5000"))
 BACKEND_CORS_ORIGINS: str = os.getenv("BACKEND_CORS_ORIGINS", "*")
 AGENT_TIMEOUT: int = int(os.getenv("AGENT_TIMEOUT", "300"))
+
+# Chat image attachments
+MAX_UPLOAD_MB: int = int(os.getenv("MAX_UPLOAD_MB", "10"))
+ALLOWED_IMAGE_TYPES: frozenset[str] = frozenset(
+    t.strip()
+    for t in os.getenv(
+        "ALLOWED_IMAGE_TYPES", "image/png,image/jpeg,image/webp,image/gif"
+    ).split(",")
+    if t.strip()
+)
