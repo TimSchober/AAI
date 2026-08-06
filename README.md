@@ -1,3 +1,11 @@
+# Wichtig
+
+Auf Moodle steht für die Semesterabgabe: Fällig: Freitag, 7. August 2026, 23:59
+
+Da wir beide die letzten zwei Wochen im Urlaub waren, müssen wir morgen noch die README anpassen und ein paar bugs lösen.
+
+Unsere App ist so also noch nicht final fertig. Wir bitten daher mit der finalen Bewertung des Projekts noch bis Freitag, 7. August 2026 um 23:59 zu warten.
+
 # Job Application Agent
 
 A multi-agent system that helps users **find jobs**, **research the employers**
