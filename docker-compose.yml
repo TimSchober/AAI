@@ -56,8 +56,15 @@ services:
       EMBED_MODEL: ${EMBED_MODEL:-all-MiniLM-L6-v2}
       JOBSUCHE_SERVICE_URL: http://jobsuche:8100
       DOCS_DIR: /app/docs
+      UPLOAD_DIR: /app/uploads
+      # Company research. Only the optional Brave web search needs a key; the
+      # other sources (Wikipedia, Wikidata, OpenStreetMap) are open.
+      BRAVE_API_KEY: ${BRAVE_API_KEY:-}
+      COMPANY_RESEARCH_LANG: ${COMPANY_RESEARCH_LANG:-de}
+      COMPANY_RESEARCH_TIMEOUT: ${COMPANY_RESEARCH_TIMEOUT:-30}
     volumes:
       - ./ChromaDB/docs:/app/docs:ro
+      - uploads:/app/uploads
     ports:
       - "${MCP_PORT:-8000}:8000"
     depends_on:
@@ -80,12 +87,30 @@ services:
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:4b}
       AGENT_TIMEOUT: ${AGENT_TIMEOUT:-300}
       BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-*}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
       - "${BACKEND_PORT:-5000}:5000"
     depends_on:
       mcp:
+        condition: service_started
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    image: aai-frontend
+    environment:
+      # nginx serves the app and proxies /api to the backend, so the browser
+      # sees a single origin and needs no CORS.
+      BACKEND_ORIGIN: http://backend:5000
+      MAX_BODY_SIZE: ${MAX_BODY_SIZE:-12m}
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      backend:
         condition: service_started
     restart: unless-stopped
 
@@ -110,3 +135,4 @@ services:
 
 volumes:
   rag-data:
+  uploads:

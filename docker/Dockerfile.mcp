@@ -1,6 +1,3 @@
-# MCP server - the shared tool layer (job board + RAG knowledge base).
-# Build context is the repository root:
-#   docker build -f docker/Dockerfile.mcp -t aai-mcp .
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
@@ -9,8 +6,7 @@ ENV PYTHONUNBUFFERED=1 \
     MCP_HOST=0.0.0.0 \
     MCP_PORT=8000 \
     MCP_PATH=/mcp \
-    # Cache the sentence-transformers embedding model inside the image layer
-    # so the container does not re-download it on every start.
+    UPLOAD_DIR=/app/uploads \
     HF_HOME=/app/.cache/huggingface
 
 WORKDIR /app
@@ -22,10 +18,10 @@ COPY config.py __init__.py ./
 COPY core_functions/ ./core_functions/
 COPY mcp_server/ ./mcp_server/
 
-# Pre-download the embedding model; embeddings are computed here, not in the
-# Chroma container, so this is what makes the first query fast.
 ARG EMBED_MODEL=all-MiniLM-L6-v2
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('${EMBED_MODEL}')"
+
+RUN mkdir -p /app/uploads
 
 RUN useradd --create-home --uid 1000 app && chown -R app:app /app
 USER app

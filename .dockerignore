@@ -18,3 +18,9 @@ ChromaDB/rag/
 
 docker-compose.yml
 README.md
+
+frontend/node_modules/
+frontend/dist/
+
+# Chat image uploads - runtime data owned by the mcp container.
+ChromaDB/uploads/
