@@ -8,6 +8,8 @@ Supported doc types and their tags:
 - zeugnis         (.md)            references
 - praeferenz      (.json)          the user's job-search preferences
 - stellenangebot  (added at runtime) job offers found by the agent
+- unternehmen     (added at runtime) employer profiles the research agent built
+- anhang          (added at runtime) images the user sent through the chat
 """
 
 from __future__ import annotations
@@ -28,15 +30,18 @@ from config import (
     CHROMA_PORT,
     CHROMA_COLLECTION,
     EMBED_MODEL,
+    UPLOAD_DIR,
 )
 
 VALID_TYPES = {
+    "anhang",
     "lebenslauf",
     "motivation",
     "noten",
     "zeugnis",
     "praeferenz",
     "stellenangebot",
+    "unternehmen",
     "arbeitszeugnis",
     "abschlusszeugnis",
     "cv",
@@ -174,6 +179,75 @@ class JobApplicationStore:
                 ingested[file.name] = self.add_document(file, doc_type=matched)
         return ingested
 
+    def add_text(
+        self,
+        text: str,
+        doc_type: str,
+        source: str,
+        language: str = "de",
+        extra_tags: Optional[dict] = None,
+    ) -> int:
+        """
+        Store raw text that did not come from a file on disk.
+        """
+        if doc_type not in VALID_TYPES:
+            raise ValueError(f"Invalid doc_type '{doc_type}'. Allowed: {VALID_TYPES}")
+        chunks = _chunk_text(text)
+        if not chunks:
+            return 0
+
+        base_metadata: dict[str, Any] = {
+            "type": doc_type,
+            "language": language,
+            "source": source,
+            "added_at": _now(),
+        }
+        if extra_tags:
+            base_metadata.update(extra_tags)
+
+        self.collection.upsert(
+            ids=[_doc_id(f"{doc_type}:{source}", i) for i in range(len(chunks))],
+            documents=chunks,
+            metadatas=[
+                {**base_metadata, "chunk_index": i, "chunk_total": len(chunks)}
+                for i in range(len(chunks))
+            ],
+        )
+        return len(chunks)
+
+    def add_image(
+        self,
+        filename: str,
+        data: bytes,
+        mime_type: str = "image/png",
+        caption: str = "",
+        doc_type: str = "anhang",
+        upload_dir: str | Path = UPLOAD_DIR,
+    ) -> dict[str, Any]:
+        """Persist an uploaded image and index a searchable record for it."""
+        directory = Path(upload_dir)
+        directory.mkdir(parents=True, exist_ok=True)
+        source = f"{hashlib.md5(data).hexdigest()[:8]}_{Path(filename).name}"
+        path = directory / source
+        path.write_bytes(data)
+
+        text = "\n".join(
+            line
+            for line in (
+                f"Bild-Anhang: {filename}",
+                f"Format: {mime_type}",
+                f"Kommentar des Nutzers: {caption}" if caption.strip() else "",
+            )
+            if line
+        )
+        chunks = self.add_text(
+            text,
+            doc_type=doc_type,
+            source=source,
+            extra_tags={"mime_type": mime_type, "path": str(path), "kind": "image"},
+        )
+        return {"source": source, "path": str(path), "stored": chunks}
+
     def add_jobs(self, jobs: list[dict], language: str = "de") -> int:
         if not jobs:
             return 0
@@ -206,6 +280,51 @@ class JobApplicationStore:
         self.collection.upsert(ids=ids, documents=documents, metadatas=metadatas)
         return len(documents)
 
+    def add_company(self, name: str, text: str, language: str = "de", **tags: Any) -> int:
+        """Store an employer profile researched for a job offer."""
+        return self.add_text(
+            text,
+            doc_type="unternehmen",
+            source=name,
+            language=language,
+            extra_tags={"arbeitgeber": name, **{k: str(v) for k, v in tags.items() if v}},
+        )
+
+    def list_employers(self, limit: int = 20) -> list[dict[str, Any]]:
+        """The employers of the job offers in the store, newest first."""
+        all_meta = self.collection.get(include=["metadatas"])["metadatas"] or []
+
+        researched = {
+            str(m.get("arbeitgeber", "")).casefold()
+            for m in all_meta
+            if m.get("type") == "unternehmen"
+        }
+
+        employers: dict[str, dict[str, Any]] = {}
+        for meta in sorted(
+            (m for m in all_meta if m.get("type") == "stellenangebot"),
+            key=lambda m: str(m.get("added_at", "")),
+            reverse=True,
+        ):
+            name = str(meta.get("arbeitgeber", "")).strip()
+            if not name:
+                continue
+            entry = employers.setdefault(
+                name,
+                {
+                    "arbeitgeber": name,
+                    "ort": str(meta.get("ort", "")),
+                    "stellen": 0,
+                    "titel": [],
+                    "recherchiert": name.casefold() in researched,
+                },
+            )
+            entry["stellen"] += 1
+            titel = str(meta.get("titel", "")).strip()
+            if titel and titel not in entry["titel"]:
+                entry["titel"].append(titel)
+
+        return list(employers.values())[:limit]
 
     def query(
         self,

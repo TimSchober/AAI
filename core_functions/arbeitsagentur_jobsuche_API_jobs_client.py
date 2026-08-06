@@ -123,23 +123,30 @@ class JobsucheClient:
         if arbeitgeber:
             params["arbeitgeber"] = arbeitgeber
 
-        resp = self._client.get("/pc/v4/jobs", params=params)
+        resp = self._client.get("/pc/v6/jobs", params=params)
         resp.raise_for_status()
         data = resp.json()
 
         jobs: list[JobSummary] = []
-        for item in data.get("stellenangebote", data.get("jobs", [])):
+        for item in _result_list(data):
             jobs.append(
                 JobSummary(
-                    referenznummer=item.get("refnr", item.get("referenznummer", "")),
-                    titel=item.get("titel", item.get("beruf", "")),
-                    arbeitgeber_name=item.get("arbeitgeber", ""),
+                    referenznummer=item.get("referenznummer") or item.get("refnr", ""),
+                    titel=item.get("stellenangebotsTitel")
+                    or item.get("titel")
+                    or item.get("beruf", ""),
+                    arbeitgeber_name=item.get("firma") or item.get("arbeitgeber", ""),
                     ort=_extract_ort(item),
                     beschaeftigungsgrad=item.get("beschaeftigungsgrad", ""),
-                    angebotsart=str(item.get("angebotsart", "")),
-                    arbeitszeit=item.get("arbeitszeit", ""),
-                    befristung=item.get("befristung", ""),
-                    veroeffentlicht_am=item.get("aktuelleVeroeffentlichungsdatum", ""),
+                    angebotsart=str(
+                        item.get("stellenangebotsart") or item.get("angebotsart", "")
+                    ),
+                    arbeitszeit=item.get("arbeitszeit") or _extract_arbeitszeit(item),
+                    befristung=str(
+                        item.get("vertragsdauer") or item.get("befristung", "")
+                    ),
+                    veroeffentlicht_am=item.get("datumErsteVeroeffentlichung")
+                    or item.get("aktuelleVeroeffentlichungsdatum", ""),
                     url=item.get("externeUrl", ""),
                 )
             )
@@ -178,12 +185,26 @@ class JobsucheClient:
         self.close()
 
 
+def _result_list(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """The offers out of a search response.
+    """
+    for key in ("ergebnisliste", "stellenangebote", "jobs"):
+        value = data.get(key)
+        if isinstance(value, list):
+            return value
+        if isinstance(value, dict) and isinstance(value.get("stellenangebote"), list):
+            return value["stellenangebote"]
+    return []
+
+
 def _extract_ort(item: dict[str, Any]) -> str:
     arbeitsort = item.get("arbeitsort")
     if isinstance(arbeitsort, dict):
         ort = arbeitsort.get("ort", "")
         plz = arbeitsort.get("plz", "")
         return f"{plz} {ort}".strip() if plz else ort
+    if item.get("stellenlokationen"):
+        return _extract_lokationen(item["stellenlokationen"])
     return item.get("ort", "")
 
 
@@ -191,8 +212,10 @@ def _extract_lokationen(lokationen: Any) -> str:
     if isinstance(lokationen, list) and lokationen:
         loc = lokationen[0]
         if isinstance(loc, dict):
-            plz = loc.get("plz", "")
-            ort = loc.get("ort", "")
+            # v6 nests the address one level deeper than the details endpoint.
+            address = loc.get("adresse") if isinstance(loc.get("adresse"), dict) else loc
+            plz = address.get("plz", "")
+            ort = address.get("ort", "")
             return f"{plz} {ort}".strip() if plz else ort
     return ""
 
