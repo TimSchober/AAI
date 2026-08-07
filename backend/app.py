@@ -24,7 +24,7 @@ import logging
 from typing import Any
 
 import httpx
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 
 from config import (
     AGENT_TIMEOUT,
@@ -78,9 +78,17 @@ def _register_cors(app: Flask) -> None:
         )
         return response
 
-    @app.route("/<path:_any>", methods=["OPTIONS"])
-    def preflight(_any: str) -> Any:
-        return ("", 204)
+    @app.before_request
+    def preflight() -> Any:
+        """
+        Answer every CORS preflight before routing matters.
+
+        A catch-all OPTIONS *route* would also claim unknown paths, so a plain
+        GET on one would fail with 405 instead of 404.
+        """
+        if request.method == "OPTIONS":
+            return ("", 204)
+        return None
 
 
 def _register_error_handlers(app: Flask) -> None:

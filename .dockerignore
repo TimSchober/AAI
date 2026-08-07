@@ -11,7 +11,6 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
-# Local embedded vector store - the rag service owns the data in Docker.
 ChromaDB/chroma_db/
 ChromaDB/main.py
 ChromaDB/rag/
@@ -19,8 +18,11 @@ ChromaDB/rag/
 docker-compose.yml
 README.md
 
+tests/
+pytest.ini
+requirements-dev.txt
+
 frontend/node_modules/
 frontend/dist/
 
-# Chat image uploads - runtime data owned by the mcp container.
 ChromaDB/uploads/
