@@ -2,7 +2,15 @@
  * Thin client for the Flask backend.
  */
 
-import type { AgentInfo, ChatRequest, StreamEvent } from './types'
+import type {
+  AgentInfo,
+  ChatRequest,
+  KnowledgeOverview,
+  SettingsResponse,
+  SettingsSaved,
+  StreamEvent,
+  UploadResponse,
+} from './types'
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? ''
 
@@ -30,6 +38,40 @@ export function listAgents(): Promise<{ count: number; agents: AgentInfo[] }> {
 
 export function resetThread(agentId: string, threadId: string): Promise<unknown> {
   return request(`/api/agents/${agentId}/threads/${threadId}`, { method: 'DELETE' })
+}
+
+export function loadSettings(): Promise<SettingsResponse> {
+  return request('/api/settings')
+}
+
+/** Sends only the fields the user actually changed. */
+export function saveSettings(values: Record<string, string>): Promise<SettingsSaved> {
+  return request('/api/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ values }),
+  })
+}
+
+export function loadKnowledge(): Promise<KnowledgeOverview> {
+  return request('/api/knowledge')
+}
+
+export async function uploadDocuments(
+  files: File[],
+  options: { docType?: string; caption?: string } = {},
+): Promise<UploadResponse> {
+  const body = new FormData()
+  files.forEach((file) => body.append('files', file, file.name))
+  if (options.docType) body.append('doc_type', options.docType)
+  if (options.caption) body.append('caption', options.caption)
+
+  const response = await fetch(`${BASE}/api/knowledge/documents`, { method: 'POST', body })
+  // 415 still carries a per-file report, so only fail on other errors.
+  if (!response.ok && response.status !== 415) {
+    throw new ApiError(await errorMessage(response), response.status)
+  }
+  return (await response.json()) as UploadResponse
 }
 
 export async function streamChat(

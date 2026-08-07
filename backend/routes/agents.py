@@ -9,6 +9,7 @@ from typing import Any
 from flask import Blueprint, Response, current_app, jsonify, request
 
 from backend.attachments import Attachment, parse_chat_request
+from backend.errors import friendly_message
 
 agents_bp = Blueprint("agents", __name__, url_prefix="/api/agents")
 
@@ -61,7 +62,7 @@ def chat_stream(agent_id: str) -> Any:
                 yield _sse(event)
         except Exception as exc:
             logger.exception("streaming turn failed")
-            yield _sse({"type": "error", "error": str(exc)})
+            yield _sse({"type": "error", "error": friendly_message(exc)})
         yield _sse({"type": "end", "thread_id": thread_id})
 
     return Response(

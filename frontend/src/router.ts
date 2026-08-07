@@ -5,7 +5,9 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
 import ChatView from '@/views/ChatView.vue'
-import PlaceholderView from '@/views/PlaceholderView.vue'
+import KnowledgeView from '@/views/KnowledgeView.vue'
+import ReviewView from '@/views/ReviewView.vue'
+import SettingsView from '@/views/SettingsView.vue'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -23,16 +25,22 @@ export const routes: RouteRecordRaw[] = [
     meta: { label: 'Chat' },
   },
   {
+    path: '/unterlagen',
+    name: 'review',
+    component: ReviewView,
+    meta: { label: 'Unterlagen-Check', hint: 'Lebenslauf hochladen und prüfen lassen' },
+  },
+  {
     path: '/wissen',
     name: 'knowledge',
-    component: PlaceholderView,
+    component: KnowledgeView,
     meta: { label: 'Wissensdatenbank', hint: 'Dokumente und gespeicherte Stellen' },
   },
   {
     path: '/einstellungen',
     name: 'settings',
-    component: PlaceholderView,
-    meta: { label: 'Einstellungen', hint: 'Modell, Agent und Präferenzen' },
+    component: SettingsView,
+    meta: { label: 'Einstellungen', hint: 'Modell, Dienste und Limits' },
   },
 ]
 

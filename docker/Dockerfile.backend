@@ -13,6 +13,8 @@ COPY config.py __init__.py main.py tracing.py ./
 COPY agents/ ./agents/
 COPY backend/ ./backend/
 
+RUN mkdir -p /app/runtime
+
 RUN useradd --create-home --uid 1000 app && chown -R app:app /app
 USER app
 

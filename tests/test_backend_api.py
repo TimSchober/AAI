@@ -42,7 +42,11 @@ def test_agents_are_listed_with_cors_headers(client: FlaskClient) -> None:
     assert response.status_code == 200
     payload = response.get_json()
     assert payload["count"] == len(payload["agents"])
-    assert {a["id"] for a in payload["agents"]} == {"job_search", "company_research"}
+    assert {a["id"] for a in payload["agents"]} == {
+        "job_search",
+        "company_research",
+        "document_review",
+    }
     assert all(a["name"] and a["description"] for a in payload["agents"])
     # The Vue frontend calls the API cross-origin.
     assert response.headers["Access-Control-Allow-Origin"]

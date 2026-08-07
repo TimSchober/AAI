@@ -16,6 +16,8 @@ COPY core_functions/__init__.py ./core_functions/
 COPY core_functions/arbeitsagentur_jobsuche_API_jobs_client.py ./core_functions/
 COPY services/ ./services/
 
+RUN mkdir -p /app/runtime
+
 RUN useradd --create-home --uid 1000 app && chown -R app:app /app
 USER app
 

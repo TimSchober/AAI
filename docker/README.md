@@ -49,7 +49,16 @@ override the `image:` keys — for example:
 
 ```bash
 docker pull tims1014/repo_for_aai_lecture:backend
+docker pull tims1014/repo_for_aai_lecture:mcp
+docker pull tims1014/repo_for_aai_lecture:frontend
+docker pull tims1014/repo_for_aai_lecture:rag
+docker pull tims1014/repo_for_aai_lecture:jobsuche
+
 docker tag  tims1014/repo_for_aai_lecture:backend aai-backend
+docker tag  tims1014/repo_for_aai_lecture:mcp aai-mcp
+docker tag  tims1014/repo_for_aai_lecture:frontend aai-frontend
+docker tag  tims1014/repo_for_aai_lecture:rag aai-rag
+docker tag  tims1014/repo_for_aai_lecture:jobsuche aai-jobsuche
 ```
 
 ## How the services find each other

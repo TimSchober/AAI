@@ -6,20 +6,20 @@ from __future__ import annotations
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
-from config import MCP_URL
+import config
 
 
-def build_mcp_client(url: str = MCP_URL) -> MultiServerMCPClient:
+def build_mcp_client(url: str = "") -> MultiServerMCPClient:
     return MultiServerMCPClient(
         {
             "jobboard": {
-                "url": url,
+                "url": url or config.MCP_URL,
                 "transport": "streamable_http",
             }
         }
     )
 
 
-async def load_mcp_tools(url: str = MCP_URL):
+async def load_mcp_tools(url: str = ""):
     client = build_mcp_client(url)
     return await client.get_tools()

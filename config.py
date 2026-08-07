@@ -15,6 +15,9 @@ REPO_ROOT = PACKAGE_ROOT.parent
 load_dotenv(PACKAGE_ROOT / ".env")
 load_dotenv(REPO_ROOT / ".env")
 
+SETTINGS_FILE: str = os.getenv("SETTINGS_FILE", str(PACKAGE_ROOT / ".env.runtime"))
+load_dotenv(SETTINGS_FILE, override=True)
+
 # Ollama LLM:
 OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "qwen3.5:4b")

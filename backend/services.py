@@ -11,7 +11,9 @@ from typing import Any, AsyncIterator, Awaitable, Callable
 
 from langgraph.checkpoint.memory import MemorySaver
 
+import config
 from agents.company_research_agent import build_company_research_agent
+from agents.document_review_agent import build_document_review_agent
 from agents.job_search_agent import build_job_search_agent
 from agents.mcp_client import load_mcp_tools
 from backend.attachments import Attachment
@@ -57,6 +59,15 @@ AGENT_SPECS: dict[str, AgentSpec] = {
         ),
         builder=build_company_research_agent,
     ),
+    "document_review": AgentSpec(
+        id="document_review",
+        name="Unterlagen-Coach",
+        description=(
+            "Prüft hochgeladene Bewerbungsunterlagen - Lebenslauf, Anschreiben, "
+            "Zeugnis - und sagt konkret, was daran besser werden kann."
+        ),
+        builder=build_document_review_agent,
+    ),
 }
 
 
@@ -99,12 +110,23 @@ class AgentService:
         spec = self._spec(agent_id)
         with self._lock:
             if agent_id not in self._agents:
-                checkpointer = MemorySaver()
-                self._checkpointers[agent_id] = checkpointer
+                checkpointer = self._checkpointers.setdefault(agent_id, MemorySaver())
                 self._agents[agent_id] = self._runtime.run(
                     spec.builder(checkpointer), timeout=self._timeout
                 )
             return self._agents[agent_id]
+
+    def invalidate(self) -> None:
+        """
+        Drop the built agents so the next turn picks up changed settings.
+
+        Called after the settings page changes the model, the Ollama URL or the
+        MCP endpoint. Conversation history survives - only the agent objects,
+        which captured the old model and tools, are thrown away.
+        """
+        with self._lock:
+            self._agents.clear()
+            self._timeout = config.AGENT_TIMEOUT
 
     @staticmethod
     def _config(thread_id: str) -> dict[str, Any]:
@@ -263,6 +285,12 @@ class MCPService:
             if self._tools is None or refresh:
                 self._tools = self._runtime.run(load_mcp_tools(), timeout=self._timeout)
             return self._tools
+
+    def invalidate(self) -> None:
+        """Forget the cached catalogue; the next call reloads it from MCP_URL."""
+        with self._lock:
+            self._tools = None
+            self._timeout = config.AGENT_TIMEOUT
 
     def list_tools(self, refresh: bool = False) -> dict[str, Any]:
         tools = self._load(refresh=refresh)

@@ -99,6 +99,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.runtime
 .envrc
 .venv
 env/

@@ -10,7 +10,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langchain.agents import create_agent
 
-from config import OLLAMA_MODEL, OLLAMA_OPENAI_URL, OLLAMA_API_KEY
+import config
 from agents.mcp_client import load_mcp_tools
 from tracing import traced
 
@@ -55,9 +55,9 @@ und nutze ausschließlich die Tool-Ergebnisse.
 
 def build_model() -> ChatOpenAI:
     return ChatOpenAI(
-        model=OLLAMA_MODEL,
-        base_url=OLLAMA_OPENAI_URL,
-        api_key=OLLAMA_API_KEY,
+        model=config.OLLAMA_MODEL,
+        base_url=config.OLLAMA_OPENAI_URL,
+        api_key=config.OLLAMA_API_KEY,
         temperature=0,
     )
 
