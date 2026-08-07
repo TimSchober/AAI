@@ -34,6 +34,10 @@ python -m mcp_server
 | `DELETE` | `/api/agents/<id>/threads/<thread_id>`      | Forget a conversation                  |
 | `GET`    | `/api/mcp/tools`                            | MCP tool catalogue                     |
 | `POST`   | `/api/mcp/tools/<name>/call`                | Invoke a single MCP tool               |
+| `GET`    | `/api/knowledge`                            | What is stored, and what may be uploaded |
+| `POST`   | `/api/knowledge/documents`                  | Upload files/images into the RAG store |
+| `GET`    | `/api/settings`                             | Adjustable configuration + current values |
+| `PUT`    | `/api/settings`                             | Persist and apply configuration changes |
 
 ### Agents
 
@@ -41,6 +45,7 @@ python -m mcp_server
 | ------------------ | -------------------------------------------------------------- |
 | `job_search`       | Searches the Arbeitsagentur job board                          |
 | `company_research` | Researches the employer behind a found offer                   |
+| `document_review`  | Reviews an uploaded CV / cover letter and advises on it         |
 
 ### Chat
 
@@ -86,3 +91,52 @@ curl -X POST localhost:5000/api/mcp/tools/research_company/call \
 ```
 
 Although we tested it several times with Postman, sometimes an (yet) unknown bug still occurs.
+
+### Knowledge base uploads
+
+`multipart/form-data` with any number of `files` parts, plus the optional
+`doc_type` (otherwise derived from the file name) and `caption` (stored with an
+image):
+
+```bash
+curl -X POST localhost:5000/api/knowledge/documents \
+  -F 'files=@Lebenslauf.pdf' \
+  -F 'files=@notenuebersicht.png' \
+  -F 'caption=Screenshot der Übersicht'
+```
+
+The response reports every file separately, so a rejected one does not fail the
+others:
+
+```json
+{"stored": 3,
+ "results": [{"ok": true, "filename": "Lebenslauf.pdf", "doc_type": "lebenslauf", "stored": 2},
+             {"ok": false, "filename": "notiz.exe", "error": "nicht unterstützt - ..."}],
+ "counts": {"lebenslauf": 2}}
+```
+
+`415` means *nothing* could be stored; a mixed result is still `200`.
+
+### Settings
+
+`GET` returns the catalogue grouped for the UI. Secrets come back as `""` with
+`is_set: true` — this API never hands a key back out. `PUT` takes only the
+fields that changed:
+
+```bash
+curl -X PUT localhost:5000/api/settings \
+  -H 'Content-Type: application/json' \
+  -d '{"values": {"OLLAMA_MODEL": "qwen3.5:7b", "OLLAMA_BASE_URL": "http://192.168.1.20:11434"}}'
+```
+
+```json
+{"saved": ["OLLAMA_BASE_URL", "OLLAMA_MODEL"],
+ "applied": ["OLLAMA_BASE_URL", "OLLAMA_MODEL"],
+ "restart_required": [],
+ "file": "/app/runtime/settings.env"}
+```
+
+`applied` are the ones the running backend re-bound (the next chat turn uses
+them); `restart_required` names the services that still have to be restarted.
+Only keys from the catalogue in [`settings.py`](settings.py) are accepted, so
+the endpoint cannot be used to inject arbitrary environment variables.

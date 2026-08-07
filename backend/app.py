@@ -13,6 +13,10 @@ Exposes the agents from ./agents and the tool catalogue of the MCP server in
   DELETE /api/agents/<id>/threads/<thread_id>       forget a conversation
   GET    /api/mcp/tools                             MCP tool catalogue
   POST   /api/mcp/tools/<name>/call                 invoke one MCP tool
+  GET    /api/knowledge                             what the RAG store holds
+  POST   /api/knowledge/documents                   upload files into the store
+  GET    /api/settings                              adjustable configuration
+  PUT    /api/settings                              change it at runtime
 
 The two chat endpoints take JSON or multipart/form-data; the latter is how
 images reach the agent, thats for feeding the Lebenslauf etc.
@@ -26,17 +30,13 @@ from typing import Any
 import httpx
 from flask import Flask, jsonify, request
 
-from config import (
-    AGENT_TIMEOUT,
-    BACKEND_CORS_ORIGINS,
-    BACKEND_HOST,
-    BACKEND_PORT,
-    MAX_UPLOAD_MB,
-)
+import config
 from backend.attachments import AttachmentError
-from backend.routes import agents_bp, health_bp, mcp_bp
+from backend.errors import is_connection_error
+from backend.routes import agents_bp, health_bp, knowledge_bp, mcp_bp, settings_bp
 from backend.runtime import AsyncRuntime
 from backend.services import AgentNotFound, AgentService, MCPService, ToolNotFound
+from backend.settings import SettingsError
 
 log = logging.getLogger(__name__)
 
@@ -44,19 +44,21 @@ log = logging.getLogger(__name__)
 def create_app() -> Flask:
     app = Flask(__name__)
     app.config["JSON_SORT_KEYS"] = False
-    app.config["MAX_CONTENT_LENGTH"] = (MAX_UPLOAD_MB + 1) * 1024 * 1024
+    app.config["MAX_CONTENT_LENGTH"] = (config.MAX_UPLOAD_MB + 1) * 1024 * 1024
 
     runtime = AsyncRuntime()
-    mcp_service = MCPService(runtime, timeout=AGENT_TIMEOUT)
+    mcp_service = MCPService(runtime, timeout=config.AGENT_TIMEOUT)
     app.extensions["async_runtime"] = runtime
     app.extensions["mcp_service"] = mcp_service
     app.extensions["agent_service"] = AgentService(
-        runtime, timeout=AGENT_TIMEOUT, mcp=mcp_service
+        runtime, timeout=config.AGENT_TIMEOUT, mcp=mcp_service
     )
 
     app.register_blueprint(health_bp)
     app.register_blueprint(agents_bp)
     app.register_blueprint(mcp_bp)
+    app.register_blueprint(knowledge_bp)
+    app.register_blueprint(settings_bp)
 
     _register_cors(app)
     _register_error_handlers(app)
@@ -65,11 +67,12 @@ def create_app() -> Flask:
 
 def _register_cors(app: Flask) -> None:
     """Minimal CORS so a browser front-end can call the API directly."""
-    origins = BACKEND_CORS_ORIGINS
 
     @app.after_request
     def add_cors_headers(response: Any) -> Any:
-        response.headers.setdefault("Access-Control-Allow-Origin", origins)
+        response.headers.setdefault(
+            "Access-Control-Allow-Origin", config.BACKEND_CORS_ORIGINS
+        )
         response.headers.setdefault(
             "Access-Control-Allow-Headers", "Content-Type, Authorization"
         )
@@ -96,9 +99,13 @@ def _register_error_handlers(app: Flask) -> None:
     def bad_attachment(exc: AttachmentError) -> Any:
         return jsonify({"error": str(exc)}), exc.status
 
+    @app.errorhandler(SettingsError)
+    def bad_setting(exc: SettingsError) -> Any:
+        return jsonify({"error": str(exc)}), exc.status
+
     @app.errorhandler(413)
     def too_large(_exc: Any) -> Any:
-        return jsonify({"error": f"request body exceeds {MAX_UPLOAD_MB} MB"}), 413
+        return jsonify({"error": f"request body exceeds {config.MAX_UPLOAD_MB} MB"}), 413
 
     @app.errorhandler(AgentNotFound)
     def unknown_agent(exc: AgentNotFound) -> Any:
@@ -123,7 +130,7 @@ def _register_error_handlers(app: Flask) -> None:
 
     @app.errorhandler(Exception)
     def unhandled(exc: Exception) -> Any:
-        if _is_connection_error(exc):
+        if is_connection_error(exc):
             log.warning("dependency unreachable: %s", exc)
             return (
                 jsonify(
@@ -139,20 +146,9 @@ def _register_error_handlers(app: Flask) -> None:
         return jsonify({"error": "internal server error", "detail": str(exc)}), 500
 
 
-def _is_connection_error(exc: BaseException) -> bool:
-    seen: set[int] = set()
-    current: BaseException | None = exc
-    while current is not None and id(current) not in seen:
-        seen.add(id(current))
-        if isinstance(current, (httpx.ConnectError, httpx.ConnectTimeout, ConnectionError)):
-            return True
-        current = current.__cause__ or current.__context__
-    return False
-
-
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
-    create_app().run(host=BACKEND_HOST, port=BACKEND_PORT, threaded=True)
+    create_app().run(host=config.BACKEND_HOST, port=config.BACKEND_PORT, threaded=True)
 
 
 if __name__ == "__main__":
