@@ -13,9 +13,11 @@ Employer research (Wikipedia, Wikidata, OpenStreetMap, optionally Brave)
 Knowledge base (ChromaDB RAG)
 - store_jobs         – persist arbitrary job dicts as searchable text
 - query_knowledge    – semantic search across all stored documents
+- get_document       – read one stored document back in full
 - get_profile_context – pull the user's relevant CV/preference chunks
 - list_knowledge     – counts per document type
 - ingest_documents   – load the user's personal docs (CV, preferences …)
+- ingest_file        – store one uploaded document (md/txt/json/pdf/csv)
 - ingest_image       – store an image sent through the chat
 - store_document_text – store text an agent extracted (e.g. read off an image)
 """
@@ -233,6 +235,23 @@ def query_knowledge(
 
 
 @mcp.tool()
+def get_document(source: str) -> dict[str, Any]:
+    """
+    Return one stored document in full, in its original order.
+
+    Use this instead of `query_knowledge` when you have to read a whole
+    document rather than search for something - reviewing a CV, for example.
+    `source` is what an upload returned; the file name the user uploaded also
+    works.
+
+    Returns {"found": bool, "source", "type", "chunks", "truncated", "text"}.
+    found=false means nothing is stored under that name; list what is there
+    with `list_knowledge` instead of guessing.
+    """
+    return _rag().get_document(source)
+
+
+@mcp.tool()
 def get_profile_context(job_description: str) -> str:
     """
     Return the users most relevant CV, preference and reference snippets for a
@@ -282,6 +301,32 @@ def ingest_image(
     return _rag().add_image(
         filename=filename, data=data, mime_type=mime_type, caption=caption
     )
+
+
+@mcp.tool()
+def ingest_file(
+    filename: str,
+    data_base64: str,
+    doc_type: str = "",
+) -> dict[str, Any]:
+    """
+    Store a document the user uploaded (CV, references, grades, preferences).
+
+    Accepts .md, .txt, .json, .pdf and .csv. The file is written to the upload
+    folder and its text is chunked into the knowledge base. Leave `doc_type`
+    empty to derive it from the file name ("Lebenslauf.pdf" -> lebenslauf),
+    otherwise pass one of the types listed on `store_document_text`.
+
+    Returns {"source": ..., "path": ..., "type": ..., "stored": <chunks>}.
+    """
+    try:
+        data = base64.b64decode(data_base64, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError(f"data_base64 is not valid base64: {exc}") from exc
+    if not data:
+        raise ValueError("data_base64 is empty")
+
+    return _rag().add_file(filename=filename, data=data, doc_type=doc_type)
 
 
 @mcp.tool()
