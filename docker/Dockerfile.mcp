@@ -21,7 +21,7 @@ COPY mcp_server/ ./mcp_server/
 ARG EMBED_MODEL=all-MiniLM-L6-v2
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('${EMBED_MODEL}')"
 
-RUN mkdir -p /app/uploads
+RUN mkdir -p /app/uploads /app/runtime
 
 RUN useradd --create-home --uid 1000 app && chown -R app:app /app
 USER app
