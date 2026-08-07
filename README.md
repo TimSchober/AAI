@@ -188,6 +188,25 @@ the model. Seeing them requires a vision-capable `OLLAMA_MODEL` (see
 away but the agent cannot read it. Details:
 [`frontend/README.md`](frontend/README.md).
 
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+The suite in [`tests/`](tests) runs offline — no Ollama, MCP server, job board or
+vector store has to be up. Every outbound HTTP call is answered by an
+`httpx.MockTransport`, and the backend is exercised through Flask's test client.
+
+| Test module | Covers |
+| --- | --- |
+| `test_attachments.py` | Chat image uploads: data URLs and multipart parts, size/type limits, filename sanitizing |
+| `test_serialization.py` | LangChain messages and MCP tools turned into the JSON the frontend consumes |
+| `test_company_research_client.py` | Employer name normalization plus the profile that reaches the knowledge base |
+| `test_jobsuche_client.py` | Arbeitsagentur query parameters and the mapping of both response shapes |
+| `test_backend_api.py` | Flask app end to end: routes, CORS, and the error handlers with their status codes |
+
 ## Optional: tracing with Phoenix
 
 Tracing is off unless the Phoenix packages are installed — they are not part of
@@ -224,3 +243,27 @@ The UI then offers the employers of those offers for research:
 
 > Branche: Maschinenbau · gegründet 1923 · Hauptsitz Ditzingen ·
 > [trumpf.com](https://www.trumpf.com/) — Quellen: wikipedia:de, wikidata, openstreetmap
+
+# Anforderungskatalog
+## Pflichtanforderungen (P)
+### P1 – Echter AI Agent mit Tool-Use
+### P2 – TAO-Zyklus sichtbar
+### P3 – Framework-Einsatz
+### P4 – Dokumentation (README)
+### P5 – Git-Repository mit sinnvoller Commit-Historie
+
+## Wahlpflichtanforderungen (W)
+### W1 Multi-Agent-Setup: mind. 2 Agenten mit definierter Rollenaufteilung (Orchestrator + Subagent)
+### W2 Multimodale Eingabe: mind. ein Agent verarbeitet eine nicht-textuelle Modalität als Input – z. B. Bilder, Audio, Video oder strukturierte Dateien (PDF, CSV)
+### W3 RAG-Komponente: das System beantwortet Fragen über eine eigene Wissensbasis / eigene Dokumente
+### W4 Agentic RAG: der Retrieval-Schritt wird vom Agenten selbst als Tool gesteuert, nicht hartcodiert
+### W5 Observability: mind. eine Form von Tracing oder strukturiertem Logging ist eingebaut (z. B. Langfuse, Phoenix, strukturierte stdout-Ausgabe)
+### W6 Prediction Service: der Agent / das Modell ist als HTTP-API erreichbar (z.B. FastAPI, Flask)
+### W7 Containerisierung: das System startet vollständig via docker compose up (Dockerfile vorhanden)
+### W8 Automatisiertes Testing: mind. 5 sinnvolle Unit- oder Integrationstests VL 10
+### W9 Input-Validierung & Fehlerbehandlung: fehlerhafte oder unerwartete Eingaben werden graceful abgefangen
+### W10 CI/CD-Pipeline: mind. ein automatischer Schritt bei Push (GitHub Actions, GitLab CI o. ä.)
+### W11 Monitoring-Endpoint: /health-Route oder Prometheus-Metriken vorhanden
+### W12 Data/Concept Drift – Reflexion (min. 1/2 Seite): Wie könnte Drift das System beeinflussen? Was würde auffallen?
+### W13 Continual Learning – Konzept (min. 1/2 Seite): Wie könnte das System mit neuen Daten verbessert werden?
+### W14 Responsible AI – Reflexion (min. 1/2 Seite): Welche Risiken, Biases oder Missbrauchspotenziale hat euer System?
