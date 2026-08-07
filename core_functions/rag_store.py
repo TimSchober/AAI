@@ -52,6 +52,29 @@ VALID_TYPES = {
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 100
 
+NAME_TO_TYPE = {
+    "lebenslauf": "lebenslauf",
+    "cv": "cv",
+    "motivation": "motivation",
+    "anschreiben": "motivation",
+    "notenübersicht": "notenübersicht",
+    "noten": "noten",
+    "arbeitszeugnis": "arbeitszeugnis",
+    "abschlusszeugnis": "abschlusszeugnis",
+    "zeugnis": "zeugnis",
+    "praeferenzen": "praeferenz",
+    "praeferenz": "praeferenz",
+    "präferenz": "praeferenz",
+}
+
+READABLE_SUFFIXES = {".md", ".txt", ".json", ".pdf", ".csv"}
+
+
+def infer_doc_type(filename: str, default: str = "anhang") -> str:
+    """Guess the document type from a file name, e.g. 'Lebenslauf_2026.pdf'."""
+    stem = Path(filename).stem.lower()
+    return next((t for key, t in NAME_TO_TYPE.items() if key in stem), default)
+
 def _chunk_text(text: str, size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
     chunks: list[str] = []
     start = 0
@@ -154,30 +177,57 @@ class JobApplicationStore:
 
     def add_all_documents(self, docs_dir: str | Path) -> dict[str, int]:
         docs_dir = Path(docs_dir)
-        name_to_type = {
-            "lebenslauf": "lebenslauf",
-            "motivation": "motivation",
-            "noten": "noten",
-            "zeugnis": "zeugnis",
-            "praeferenz": "praeferenz",
-            "praeferenzen": "praeferenz",
-            "arbeitszeugnis": "arbeitszeugnis",
-            "abschlusszeugnis": "abschlusszeugnis",
-            "cv": "cv",
-            "notenübersicht": "notenübersicht",
-            "noten": "noten"
-        }
         ingested: dict[str, int] = {}
         for file in sorted(docs_dir.iterdir()):
-            if file.suffix.lower() not in {".md", ".txt", ".json", ".pdf", ".csv"}:
+            if file.suffix.lower() not in READABLE_SUFFIXES:
                 continue
-            matched = next(
-                (t for key, t in name_to_type.items() if key in file.stem.lower()),
-                None,
-            )
+            matched = infer_doc_type(file.name, default="")
             if matched:
                 ingested[file.name] = self.add_document(file, doc_type=matched)
         return ingested
+
+    def add_file(
+        self,
+        filename: str,
+        data: bytes,
+        doc_type: str = "",
+        upload_dir: str | Path = UPLOAD_DIR,
+    ) -> dict[str, Any]:
+        """
+        Store a file the user uploaded through the web UI.
+
+        The bytes are written into the upload folder (the docs folder is
+        mounted read-only in Docker) and the extracted text is indexed. Without
+        an explicit `doc_type` the name decides, e.g. "Lebenslauf.pdf".
+        """
+        name = Path(filename).name
+        suffix = Path(name).suffix.lower()
+        if suffix not in READABLE_SUFFIXES:
+            raise ValueError(
+                f"Unsupported file format: {suffix or name}. "
+                f"Allowed: {', '.join(sorted(READABLE_SUFFIXES))}"
+            )
+
+        resolved = doc_type or infer_doc_type(name)
+        if resolved not in VALID_TYPES:
+            raise ValueError(f"Invalid doc_type '{resolved}'. Allowed: {VALID_TYPES}")
+
+        directory = Path(upload_dir)
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / f"{hashlib.md5(data).hexdigest()[:8]}_{name}"
+        path.write_bytes(data)
+
+        chunks = self.add_document(
+            path,
+            doc_type=resolved,
+            extra_tags={"original_name": name, "kind": "upload"},
+        )
+        return {
+            "source": path.name,
+            "path": str(path),
+            "type": resolved,
+            "stored": chunks,
+        }
 
     def add_text(
         self,
@@ -326,6 +376,40 @@ class JobApplicationStore:
 
         return list(employers.values())[:limit]
 
+    def get_document(self, source: str, max_chars: int = 12000) -> dict[str, Any]:
+        """
+        Reassemble one stored document from its chunks.
+
+        `query` returns the fragments that match a question; reviewing a CV
+        needs the whole thing, in the order it was written. `source` is what
+        `add_file` / `add_image` returned, but the name the user uploaded works
+        too.
+        """
+        found = self.collection.get(
+            where={"source": source}, include=["documents", "metadatas"]
+        )
+        if not found.get("documents"):
+            found = self.collection.get(
+                where={"original_name": source}, include=["documents", "metadatas"]
+            )
+
+        documents = found.get("documents") or []
+        metadatas = found.get("metadatas") or []
+        if not documents:
+            return {"source": source, "found": False, "text": "", "chunks": 0}
+
+        text = _assemble_chunks(documents, metadatas)
+        truncated = len(text) > max_chars
+        first = metadatas[0] if metadatas else {}
+        return {
+            "source": str(first.get("original_name") or first.get("source") or source),
+            "found": True,
+            "type": first.get("type", ""),
+            "chunks": len(documents),
+            "truncated": truncated,
+            "text": text[:max_chars],
+        }
+
     def query(
         self,
         query_text: str,
@@ -403,6 +487,41 @@ class JobApplicationStore:
 
     def reset(self) -> None:
         self.client.delete_collection(self.collection.name)
+
+
+_MIN_SEAM = 20
+
+
+def _assemble_chunks(documents: list[str], metadatas: list[dict]) -> str:
+    """
+    Put chunks back in writing order; chroma returns them unordered.
+
+    Chunks are stored with CHUNK_OVERLAP characters of overlap, so a plain join
+    repeats a stretch of text at every seam. That is noise in a document the
+    model is asked to read closely, so overlapping seams are stitched.
+    """
+    indexed = [
+        (int((meta or {}).get("chunk_index", position)), text)
+        for position, (text, meta) in enumerate(zip(documents, metadatas))
+    ]
+
+    assembled = ""
+    for _, text in sorted(indexed, key=lambda item: item[0]):
+        if not assembled:
+            assembled = text
+            continue
+        seam = _seam_length(assembled, text)
+        assembled += text[seam:] if seam else f"\n{text}"
+    return assembled
+
+
+def _seam_length(left: str, right: str) -> int:
+    """How much of `right`'s start repeats `left`'s end."""
+    longest = min(len(left), len(right), CHUNK_OVERLAP)
+    for size in range(longest, _MIN_SEAM - 1, -1):
+        if left.endswith(right[:size]):
+            return size
+    return 0
 
 
 def _job_to_text(job: dict) -> str:
