@@ -1,6 +1,6 @@
 # Frontend
 
-Vue 3 + TypeScript (Vite) chat UI for the agents in [`../agents`](../agents).
+Vue 3 + TypeScript (Vite) UI for the agents in [`../agents`](../agents).
 It talks only to the Flask backend in [`../backend`](../backend).
 
 ## Run
