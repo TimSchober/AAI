@@ -6,6 +6,7 @@ __pycache__/
 **/__pycache__/
 *.py[cod]
 .env
+.env.runtime
 *.egg-info/
 .pytest_cache/
 .mypy_cache/

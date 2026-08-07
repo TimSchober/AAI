@@ -1,11 +1,3 @@
-# Job Application Agent - full stack.
-#
-#   docker compose up --build
-#
-# Ollama is NOT containerised here: it usually runs on the host (often with GPU
-# access). The services reach it via host.docker.internal, which the
-# extra_hosts entry maps to the host gateway on Linux too.
-
 name: aai
 
 services:
@@ -35,6 +27,9 @@ services:
     environment:
       JOBSUCHE_API_KEY: ${JOBSUCHE_API_KEY:-jobboerse-jobsuche}
       JOBSUCHE_API_URL: ${JOBSUCHE_API_URL:-https://rest.arbeitsagentur.de/jobboerse/jobsuche-service}
+      SETTINGS_FILE: /app/runtime/settings.env
+    volumes:
+      - settings:/app/runtime
     ports:
       - "${JOBSUCHE_SERVICE_PORT:-8100}:8100"
     restart: unless-stopped
@@ -62,9 +57,11 @@ services:
       BRAVE_API_KEY: ${BRAVE_API_KEY:-}
       COMPANY_RESEARCH_LANG: ${COMPANY_RESEARCH_LANG:-de}
       COMPANY_RESEARCH_TIMEOUT: ${COMPANY_RESEARCH_TIMEOUT:-30}
+      SETTINGS_FILE: /app/runtime/settings.env
     volumes:
       - ./ChromaDB/docs:/app/docs:ro
       - uploads:/app/uploads
+      - settings:/app/runtime
     ports:
       - "${MCP_PORT:-8000}:8000"
     depends_on:
@@ -88,6 +85,9 @@ services:
       AGENT_TIMEOUT: ${AGENT_TIMEOUT:-300}
       BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-*}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
+      SETTINGS_FILE: /app/runtime/settings.env
+    volumes:
+      - settings:/app/runtime
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -103,8 +103,6 @@ services:
       dockerfile: docker/Dockerfile.frontend
     image: aai-frontend
     environment:
-      # nginx serves the app and proxies /api to the backend, so the browser
-      # sees a single origin and needs no CORS.
       BACKEND_ORIGIN: http://backend:5000
       MAX_BODY_SIZE: ${MAX_BODY_SIZE:-12m}
     ports:
@@ -124,6 +122,9 @@ services:
       MCP_URL: http://mcp:8000${MCP_PATH:-/mcp}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:4b}
+      SETTINGS_FILE: /app/runtime/settings.env
+    volumes:
+      - settings:/app/runtime
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -136,3 +137,4 @@ services:
 volumes:
   rag-data:
   uploads:
+  settings:
